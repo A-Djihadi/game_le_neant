@@ -133,3 +133,71 @@ export function insertScore(scores, entry) {
   next.sort((a, b) => b.seconds - a.seconds);
   return next.slice(0, 5);
 }
+
+// ---------- Tentatives d'appui et achievements ----------
+// Seuil atteint : le libellé se débloque exactement à `at`, jamais avant.
+export const ACHIEVEMENTS = [
+  { at: 1, label: 'PREMIER REFUS' },
+  { at: 3, label: 'DOIGT PERSÉVÉRANT' },
+  { at: 5, label: 'INSISTANCE NOTÉE' },
+  { at: 10, label: 'LE BOUTON SE SOUVIENDRA DE VOUS' },
+  { at: 25, label: 'ACHARNEMENT SUSPECT' },
+  { at: 50, label: 'TENTATIVE DE CONTACT PHYSIQUE' },
+  { at: 100, label: "LE NÉANT™ A APPELÉ QUELQU'UN" },
+  { at: 250, label: "RECORD DE L'OBSTINATION" },
+  { at: 500, label: 'INTÉGRITÉ DU BOUTON COMPROMISE' },
+];
+
+// Libellés des achievements débloqués pour `attempts` tentatives, dans l'ordre.
+export function achievementsFor(attempts) {
+  return ACHIEVEMENTS.filter((a) => attempts >= a.at).map((a) => a.label);
+}
+
+// Premier palier non encore atteint ({ at, label }), ou null une fois 500 franchi.
+export function nextAchievement(attempts) {
+  for (const a of ACHIEVEMENTS) {
+    if (attempts < a.at) return { at: a.at, label: a.label };
+  }
+  return null;
+}
+
+// 0 et 1 rendent le singulier, 2 et plus le pluriel.
+export function formatAttempts(n) {
+  return n <= 1 ? `${n} TENTATIVE` : `${n} TENTATIVES`;
+}
+
+// ---------- Placement libre (anti-chevauchement) ----------
+// Marge minimale entre un candidat et tout rectangle réservé.
+export const FREE_SPOT_MARGIN = 12;
+
+// a et b sont des rectangles {x, y, w, h}. `margin` gonfle b de chaque côté :
+// le chevauchement est signalé dès que a s'approche à moins de `margin` de b.
+export function rectsOverlap(a, b, margin = 0) {
+  return (
+    a.x < b.x + b.w + margin &&
+    a.x + a.w > b.x - margin &&
+    a.y < b.y + b.h + margin &&
+    a.y + a.h > b.y - margin
+  );
+}
+
+// Tire jusqu'à `attempts` candidats avec `random` (générateur injecté, aucun aléa interne).
+// Renvoie {x, y} entièrement dans le viewport et hors de tout rectangle réservé,
+// ou null si aucun candidat ne convient. `random` doit renvoyer un flottant dans [0,1).
+export function pickFreeSpot({ viewW, viewH, w, h, reserved = [], random, attempts = 50 }) {
+  if (typeof random !== 'function') return null;
+  if (!(Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0)) return null;
+  if (!(viewW >= w && viewH >= h)) return null;
+  const tries = Number.isFinite(attempts) && attempts > 0 ? Math.floor(attempts) : 0;
+  for (let i = 0; i < tries; i++) {
+    const x = Math.min(viewW - w, random() * (viewW - w));
+    const y = Math.min(viewH - h, random() * (viewH - h));
+    const cand = { x, y, w, h };
+    let free = true;
+    for (const r of reserved) {
+      if (rectsOverlap(cand, r, FREE_SPOT_MARGIN)) { free = false; break; }
+    }
+    if (free) return { x, y };
+  }
+  return null;
+}

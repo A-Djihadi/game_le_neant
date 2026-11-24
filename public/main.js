@@ -1,7 +1,11 @@
 // Le Néant™ : rendu, compteur, étoiles, bouton fuyard, scores. Aucun appel réseau, aucun traceur.
-import { rankFor, formatDuration, formatPercentOfDay, nextMessage, insertScore } from './logic.js';
+import {
+  rankFor, formatDuration, formatPercentOfDay, nextMessage, insertScore,
+  ACHIEVEMENTS, achievementsFor, formatAttempts, pickFreeSpot, rectsOverlap, FREE_SPOT_MARGIN,
+} from './logic.js';
 
 const SCORES_KEY = 'odg.le-neant.scores';
+const ATTEMPTS_KEY = 'odg.le-neant.attempts';
 
 // ---------- Copie d'ambiance (hors logique pure) ----------
 const STAR_MESSAGES = [
@@ -46,6 +50,9 @@ const scoresEmptyEl = document.getElementById('scoresEmpty');
 const pseudoEl = document.getElementById('pseudo');
 const saveBtn = document.getElementById('saveScore');
 const saveNoteEl = document.getElementById('saveNote');
+const attemptsEl = document.getElementById('attempts');
+const achievementsEl = document.getElementById('achievements');
+const achievementsListEl = document.getElementById('achievementsList');
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isCoarsePointer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
@@ -187,22 +194,33 @@ function spawnStar() {
     star.style.transform = `translate(${x}px, ${y}px) rotate(${angle}rad)`;
     if (!msgShown && p >= 0.45) {
       msgShown = true;
-      showStarMessage(x, y);
+      showStarMessage();
     }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 }
 
-function showStarMessage(x, y) {
+function showStarMessage() {
   const el = document.createElement('p');
   el.className = 'star-msg';
   el.textContent = STAR_MESSAGES[Math.floor(Math.random() * STAR_MESSAGES.length)];
+  el.style.visibility = 'hidden';
   document.body.appendChild(el);
-  const left = Math.max(8, Math.min(window.innerWidth - 270, x + 18));
-  const top = Math.max(8, Math.min(window.innerHeight - 80, y + 14));
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
+  const w = el.offsetWidth || 260;
+  const h = el.offsetHeight || 39;
+  const spot = pickFreeSpot({
+    viewW: window.innerWidth,
+    viewH: window.innerHeight,
+    w, h,
+    reserved: reservedRects({ includeFlee: true }),
+    random: Math.random,
+    attempts: 80,
+  });
+  if (!spot) { el.remove(); return; } // aucune place libre : on n'affiche rien
+  el.style.left = `${spot.x}px`;
+  el.style.top = `${spot.y}px`;
+  el.style.visibility = '';
   window.setTimeout(() => { el.style.opacity = '0'; }, 3200);
   window.setTimeout(() => el.remove(), 3900);
 }
@@ -221,44 +239,156 @@ function pickRandom(list, current) {
   return list[i];
 }
 
+// Rectangles réellement occupés, en coordonnées viewport ({x, y, w, h}).
+// Le bouton fuyard est inclus seulement quand on pose un autre élément (étoile).
+// Pour .core (conteneur pleine largeur, en grande partie vide sur mobile), on réserve
+// la boîte de son contenu texte, pas le conteneur entier : sinon plus aucune place libre
+// sur petit écran et le bouton retomberait sur du texte.
+function contentBounds(el) {
+  const kids = Array.from(el.children)
+    .map((c) => c.getBoundingClientRect())
+    .filter((r) => r.width > 0 && r.height > 0);
+  if (kids.length === 0) {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  }
+  const left = Math.min(...kids.map((k) => k.left));
+  const top = Math.min(...kids.map((k) => k.top));
+  const right = Math.max(...kids.map((k) => k.right));
+  const bottom = Math.max(...kids.map((k) => k.bottom));
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
+function reservedRects({ includeFlee = false } = {}) {
+  const rects = [];
+  const core = document.querySelector('.core');
+  if (core) {
+    const b = contentBounds(core);
+    if (b) rects.push(b);
+  }
+  for (const sel of ['.messages', '.footer', '.scores', '.hub']) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    rects.push({ x: r.x, y: r.y, w: r.width, h: r.height });
+  }
+  if (includeFlee && !fleeEl.hidden) {
+    const fr = fleeEl.getBoundingClientRect();
+    if (fr.width > 0 && fr.height > 0) rects.push({ x: fr.x, y: fr.y, w: fr.width, h: fr.height });
+  }
+  return rects;
+}
+
+// Dernier recours sur très petit écran : la bande horizontale libre la plus basse,
+// jamais sur du texte. Scan déterministe du bas vers le haut, gauche vers la droite.
+// Le dernier retour n'est atteint que si le bouton est plus grand que le viewport.
+function lowestFreeSpot(w, h) {
+  const viewW = window.innerWidth;
+  const viewH = window.innerHeight;
+  const reserved = reservedRects();
+  const maxX = Math.max(0, viewW - w);
+  const maxY = Math.max(0, viewH - h);
+  for (let y = maxY; y >= 0; y -= 8) {
+    for (let x = 0; x <= maxX; x += 8) {
+      const cand = { x, y, w, h };
+      if (!reserved.some((r) => rectsOverlap(cand, r, FREE_SPOT_MARGIN))) {
+        return { x, y };
+      }
+    }
+  }
+  return { x: 0, y: 0 };
+}
+
 function teleportFlee() {
   fleeEl.hidden = false;
   fleeEl.textContent = pickRandom(FLEE_LABELS, fleeEl.textContent);
-  const pad = 12;
   const bw = fleeEl.offsetWidth || 220;
   const bh = fleeEl.offsetHeight || 44;
-  const maxX = Math.max(pad, window.innerWidth - bw - pad);
-  const maxY = Math.max(pad, window.innerHeight - bh - pad);
-  let x = pad + Math.random() * (maxX - pad);
-  let y = pad + Math.random() * (maxY - pad);
-  if (x < 160 && y < 72) y = 72 + Math.random() * Math.max(1, maxY - 72); // épargne le lien HUB
-  fleeEl.style.left = `${Math.max(pad, Math.min(maxX, x))}px`;
-  fleeEl.style.top = `${Math.max(pad, Math.min(maxY, y))}px`;
+  const spot = pickFreeSpot({
+    viewW: window.innerWidth,
+    viewH: window.innerHeight,
+    w: bw, h: bh,
+    reserved: reservedRects(), // jamais sur le texte (.core/.messages/.footer/.scores/.hub)
+    random: Math.random,
+    attempts: 120,
+  });
+  const place = spot || lowestFreeSpot(bw, bh);
+  fleeEl.style.left = `${place.x}px`;
+  fleeEl.style.top = `${place.y}px`;
 }
 
 function scheduleFlee() {
   window.setTimeout(teleportFlee, 20000 + Math.random() * 40000);
 }
 
+// ---------- Tentatives d'appui et achievements (localStorage, rien d'autre) ----------
+function loadAttempts() {
+  try {
+    const n = Number(localStorage.getItem(ATTEMPTS_KEY));
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function persistAttempts(n) {
+  try { localStorage.setItem(ATTEMPTS_KEY, String(n)); } catch { /* stockage indisponible */ }
+}
+
+let attempts = loadAttempts();
+
+function renderAchievements() {
+  const unlocked = achievementsFor(attempts);
+  achievementsListEl.replaceChildren();
+  for (const label of unlocked) {
+    const li = document.createElement('li');
+    li.textContent = label;
+    achievementsListEl.appendChild(li);
+  }
+  achievementsEl.hidden = unlocked.length === 0;
+}
+
+function renderAttempts() {
+  attemptsEl.textContent = formatAttempts(attempts);
+  renderAchievements();
+}
+
+// Un essai visant le bouton (tap, clic, esquive) : incrémente, persiste, affiche.
+function recordAttempt() {
+  attempts += 1;
+  persistAttempts(attempts);
+  renderAttempts();
+  const hit = ACHIEVEMENTS.find((a) => a.at === attempts);
+  if (hit) addMessage(`Achievement débloqué : ${hit.label}`);
+}
+
 // Desktop : le bouton se téléporte dès que le pointeur approche à moins de 90 px.
+// Chaque esquive est une tentative ratée, qui compte aussi.
 document.addEventListener('mousemove', (e) => {
   if (fleeEl.hidden || isCoarsePointer) return;
   const r = fleeEl.getBoundingClientRect();
   const dx = e.clientX - (r.left + r.width / 2);
   const dy = e.clientY - (r.top + r.height / 2);
-  if (dx * dx + dy * dy < 90 * 90) teleportFlee();
+  if (dx * dx + dy * dy < 90 * 90) {
+    recordAttempt();
+    teleportFlee();
+  }
 });
 
 // Mobile : il se déplace au pointerdown, sans jamais déclencher de sortie.
 fleeEl.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'touch' || isCoarsePointer) {
     e.preventDefault();
+    recordAttempt();
     teleportFlee();
   }
 });
 
 // Cliquer (souris, ou Entrée/Espace au clavier) : une réplique, puis il repart.
 fleeEl.addEventListener('click', () => {
+  recordAttempt();
   addMessage(pickRandom(FLEE_REPLIES, null));
   teleportFlee();
 });
@@ -335,6 +465,7 @@ window.addEventListener('pagehide', () => {
 // ---------- Démarrage ----------
 baseMs = debugOffsetSeconds() * 1000;
 renderScores();
+renderAttempts();
 render();
 startClock();
 scheduleStar();

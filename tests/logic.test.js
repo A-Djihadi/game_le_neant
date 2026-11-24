@@ -11,6 +11,12 @@ import {
   ROTATION_MESSAGES,
   ROTATION_STEP,
   ROTATION_START,
+  ACHIEVEMENTS,
+  achievementsFor,
+  nextAchievement,
+  formatAttempts,
+  pickFreeSpot,
+  FREE_SPOT_MARGIN,
 } from '../public/logic.js';
 
 // ---------- Grades : chaque borne (29/30, 119/120, … 14399/14400) ----------
@@ -152,4 +158,112 @@ test('insertScore ne mute pas le tableau d\'origine', () => {
   const out = insertScore(original, { name: 'B', seconds: 20, grade: 'Y' });
   assert.equal(original.length, 1);
   assert.equal(out.length, 2);
+});
+
+// ---------- Achievements ----------
+test('ACHIEVEMENTS : 9 paliers, seuils croissants, libellés uniques', () => {
+  assert.equal(ACHIEVEMENTS.length, 9);
+  const ats = ACHIEVEMENTS.map((a) => a.at);
+  assert.deepEqual(ats, [1, 3, 5, 10, 25, 50, 100, 250, 500]);
+  assert.equal(new Set(ACHIEVEMENTS.map((a) => a.label)).size, ACHIEVEMENTS.length);
+});
+
+// Bornes : chaque seuil se débloque exactement à `at`, jamais avant.
+for (const { at, label } of ACHIEVEMENTS) {
+  test(`achievement « ${label} » se débloque à ${at}, pas à ${at - 1}`, () => {
+    assert.ok(!achievementsFor(at - 1).includes(label));
+    assert.ok(achievementsFor(at).includes(label));
+  });
+}
+
+test('achievementsFor : aucun avant 1, tout débloqué à 500', () => {
+  assert.deepEqual(achievementsFor(0), []);
+  assert.deepEqual(achievementsFor(500), ACHIEVEMENTS.map((a) => a.label));
+});
+
+test('nextAchievement : premier palier non atteint, null après 500', () => {
+  assert.deepEqual(nextAchievement(0), { at: 1, label: 'PREMIER REFUS' });
+  assert.deepEqual(nextAchievement(1), { at: 3, label: 'DOIGT PERSÉVÉRANT' });
+  assert.deepEqual(nextAchievement(4), { at: 5, label: 'INSISTANCE NOTÉE' });
+  assert.deepEqual(nextAchievement(499), { at: 500, label: 'INTÉGRITÉ DU BOUTON COMPROMISE' });
+  assert.equal(nextAchievement(500), null);
+  assert.equal(nextAchievement(501), null);
+});
+
+test('formatAttempts : singulier pour 0 et 1, pluriel ensuite', () => {
+  assert.equal(formatAttempts(0), '0 TENTATIVE');
+  assert.equal(formatAttempts(1), '1 TENTATIVE');
+  assert.equal(formatAttempts(2), '2 TENTATIVES');
+  assert.equal(formatAttempts(499), '499 TENTATIVES');
+  assert.equal(formatAttempts(500), '500 TENTATIVES');
+});
+
+// ---------- pickFreeSpot (placement sans chevauchement) ----------
+// Générateur pseudo-aléatoire déterministe (LCG), aucune dépendance à Math.random.
+function lcg(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+// Distance (signée) minimale entre deux rectangles sur chaque axe, calculée
+// indépendamment de l'implémentation : positive quand ils sont séparés.
+function axisClearance(a, b) {
+  const x = Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w);
+  const y = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+  return Math.max(x, y);
+}
+
+test('pickFreeSpot : hors de tout rectangle réservé (marge respectée)', () => {
+  const reserved = [
+    { x: 0, y: 0, w: 400, h: 300 },
+    { x: 700, y: 500, w: 300, h: 300 },
+  ];
+  const spot = pickFreeSpot({
+    viewW: 1000, viewH: 800, w: 120, h: 40,
+    reserved, random: lcg(12345), attempts: 2000,
+  });
+  assert.ok(spot, 'un emplacement libre doit exister');
+  const cand = { ...spot, w: 120, h: 40 };
+  for (const r of reserved) {
+    assert.ok(axisClearance(cand, r) >= FREE_SPOT_MARGIN, `candidat ${JSON.stringify(spot)} trop proche de ${JSON.stringify(r)}`);
+  }
+});
+
+test('pickFreeSpot : respecte les bords du viewport', () => {
+  const random = lcg(999);
+  for (let i = 0; i < 20; i++) {
+    const spot = pickFreeSpot({
+      viewW: 390, viewH: 844, w: 220, h: 44,
+      reserved: [], random, attempts: 50,
+    });
+    assert.ok(spot, 'emplacement trouvé');
+    assert.ok(spot.x >= 0 && spot.y >= 0);
+    assert.ok(spot.x + 220 <= 390 && spot.y + 44 <= 844);
+  }
+});
+
+test('pickFreeSpot : null quand la zone est entièrement occupée', () => {
+  const reserved = [{ x: 0, y: 0, w: 100, h: 100 }];
+  const spot = pickFreeSpot({
+    viewW: 100, viewH: 100, w: 20, h: 10,
+    reserved, random: () => 0.5, attempts: 50,
+  });
+  assert.equal(spot, null);
+});
+
+test('pickFreeSpot : déterministe avec un générateur injecté', () => {
+  const random = () => 0.25;
+  const args = { viewW: 100, viewH: 100, w: 20, h: 10, reserved: [], random, attempts: 5 };
+  const a = pickFreeSpot(args);
+  const b = pickFreeSpot(args);
+  assert.deepEqual(a, b);
+  assert.deepEqual(a, { x: 20, y: 22.5 });
+});
+
+test('pickFreeSpot : null quand le candidat dépasse le viewport', () => {
+  assert.equal(pickFreeSpot({ viewW: 100, viewH: 100, w: 120, h: 10, reserved: [], random: () => 0, attempts: 5 }), null);
+  assert.equal(pickFreeSpot({ viewW: 100, viewH: 100, w: 10, h: 120, reserved: [], random: () => 0, attempts: 5 }), null);
 });
