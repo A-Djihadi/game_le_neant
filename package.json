@@ -1,0 +1,6 @@
+{
+  "name": "game-le-neant",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

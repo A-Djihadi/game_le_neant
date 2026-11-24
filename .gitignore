@@ -1,0 +1,5 @@
+# Fichiers locaux, hors du dépôt
+.claude/
+.DS_Store
+Thumbs.db
+*.log
