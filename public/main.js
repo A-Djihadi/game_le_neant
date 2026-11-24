@@ -61,13 +61,14 @@ let lastCounterText = '';
 let lastGrade = '';
 
 // Paramètre de debug documenté : ?debug=seconds=3725 force un état avancé.
+// Plafonné à 24 h pour éviter qu'une valeur absurde ne gèle la page (rafale de messages).
 function debugOffsetSeconds() {
   const raw = new URLSearchParams(location.search).get('debug');
   if (!raw) return 0;
   const m = /^seconds=(\d+)$/.exec(raw);
   if (!m) return 0;
   const n = Number(m[1]);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, 86400) : 0;
 }
 
 function currentMs() {
@@ -83,9 +84,11 @@ function currentSeconds() {
 
 // Press Start 2P avance d'environ 1 em par glyphe : on adapte le corps au texte
 // pour que « 1 h 07 min 33 s » tienne à 320 px comme à 1280 px.
+// clientWidth (viewport de mise en page) est plus fiable que innerWidth en
+// émulation mobile (innerWidth peut refléter un viewport visuel élargi).
 function fitCounter(text) {
   const n = text.length || 1;
-  const maxW = Math.min(window.innerWidth * 0.9, 1100);
+  const maxW = Math.min(document.documentElement.clientWidth * 0.9, 1100);
   const size = Math.max(14, Math.min(56, Math.floor(maxW / n)));
   counterEl.style.fontSize = `${size}px`;
 }
@@ -340,3 +343,10 @@ scheduleFlee();
 window.addEventListener('resize', () => {
   if (lastCounterText) fitCounter(lastCounterText);
 });
+
+// Après chargement des polices (swap), on recalcule le corps du compteur.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => {
+    if (lastCounterText) fitCounter(lastCounterText);
+  });
+}
