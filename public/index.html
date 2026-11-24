@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Le Néant™</title>
+  <meta name="description" content="Le Néant™ : le temps que vous perdez sur cette page, mesuré avec soin. Rien ne va se produire. Restez, vous verrez.">
+  <meta name="theme-color" content="#05060a">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/fonts/press-start-2p-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/main.js"></script>
+</head>
+<body>
+  <a class="hub" href="https://ohdji.dev/">◂ HUB</a>
+
+  <main class="stage">
+    <div class="core">
+      <p class="brand">LE NÉANT™</p>
+      <p class="counter-label">TEMPS PERDU</p>
+      <p class="counter" id="counter">0 s</p>
+      <p class="grade" id="grade">VISITEUR INNOCENT</p>
+      <p class="percent" id="percent">0,00 % de votre journée</p>
+    </div>
+
+    <noscript>
+      <p class="noscript">Désolé. Sans JavaScript, le Néant™ ne peut pas compter le temps que vous perdez ici. C'est peut-être mieux ainsi.</p>
+    </noscript>
+
+    <div class="messages" id="messages" aria-live="polite"></div>
+
+    <details class="scores" id="scores">
+      <summary class="scores-toggle">TABLEAU DES SCORES</summary>
+      <div class="scores-body">
+        <section class="local">
+          <h2 class="scores-heading">VOS TEMPS PERDUS</h2>
+          <ol class="scores-list" id="localScores">
+            <li class="scores-empty" id="scoresEmpty">Aucun temps enregistré. Le Néant™ ne se souvient de rien.</li>
+          </ol>
+          <div class="save-row">
+            <label class="save-label" for="pseudo">Pseudo</label>
+            <input class="save-input" id="pseudo" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Anonyme">
+            <button class="save-btn" id="saveScore" type="button">ENREGISTRER MON TEMPS</button>
+          </div>
+          <p class="save-note" id="saveNote" aria-live="polite"></p>
+        </section>
+
+        <section class="official">
+          <h2 class="scores-heading">CLASSEMENT OFFICIEL</h2>
+          <ol class="scores-list official-list">
+            <li><span class="score-name">Une horloge rancunière</span><span class="score-grade">HORS CATÉGORIE</span><span class="score-time">9 h 12 min 04 s</span></li>
+            <li><span class="score-name">Monsieur Patience</span><span class="score-grade">ENTITÉ INEXPLICABLE</span><span class="score-time">7 h 33 min 18 s</span></li>
+            <li><span class="score-name">Le Syndicat du Vide</span><span class="score-grade">GARDIEN CERTIFIÉ DU VIDE</span><span class="score-time">5 h 02 min 41 s</span></li>
+            <li><span class="score-name">Un onglet jamais fermé</span><span class="score-grade">ARCHIVISTE DE L'INUTILE</span><span class="score-time">2 h 47 min 59 s</span></li>
+            <li><span class="score-name">Vous, potentiellement, à cet instant</span><span class="score-grade">EN COURS</span><span class="score-time">en cours</span></li>
+          </ol>
+          <p class="official-note">Classement incontestable, établi par le Néant™ lui-même.</p>
+        </section>
+      </div>
+    </details>
+
+    <footer class="footer">
+      <p class="contact">Écrire pour se plaindre d'avoir perdu ce temps : <a class="contact-link" href="mailto:contact@ohdji.dev">contact@ohdji.dev</a></p>
+    </footer>
+  </main>
+
+  <div class="sky" id="sky" aria-hidden="true"></div>
+  <button class="flee" id="flee" type="button" hidden>J'ai compris, je m'en vais</button>
+</body>
+</html>
